@@ -14,7 +14,7 @@ contract("voting", (accounts) => {
     VotingSessionEnded: new BN("4"),
     VotesTallied: new BN("5"),
   };
-  // describe
+
   describe("add a voter", () => {
     beforeEach(async function () {
       VotingInstance = await Voting.deployed();
@@ -40,7 +40,11 @@ contract("voting", (accounts) => {
     it("... should return a voter", async () => {
       await VotingInstance.getVoter(accounts[1], { from: owner });
     });
-
+  });
+  describe("open the proposals", () => {
+    beforeEach(async function () {
+      VotingInstance = await Voting.deployed();
+    });
     it("...should check if the session is open", async () => {
       const currentStatus = await VotingInstance.workflowStatus();
       expect(currentStatus).to.be.bignumber.equal(
@@ -80,63 +84,66 @@ contract("voting", (accounts) => {
         );
       });
     });
+  });
 
-    describe("is Voting", () => {
-      beforeEach(async function () {
-        VotingInstance = await Voting.deployed();
+  describe("is Voting", () => {
+    beforeEach(async function () {
+      VotingInstance = await Voting.deployed();
+    });
+
+    it("should open the voting session", async () => {
+      await VotingInstance.startVotingSession({ from: owner });
+      const initialStatus = await VotingInstance.workflowStatus();
+      expect(initialStatus).to.be.bignumber.equal(
+        WorkflowStatus.VotingSessionStarted
+      );
+    });
+
+    it("should vote for the first proposal", async () => {
+      await VotingInstance.setVote(1, { from: accounts[1] });
+      let voterObjet = await VotingInstance.getVoter(accounts[1], {
+        from: owner,
       });
 
-      it("should open the voting session", async () => {
-        await VotingInstance.startVotingSession({ from: owner });
-        const initialStatus = await VotingInstance.workflowStatus();
-        expect(initialStatus).to.be.bignumber.equal(
-          WorkflowStatus.VotingSessionStarted
-        );
-      });
+      expect(voterObjet.hasVoted).to.be.true;
+      await expectRevert(
+        VotingInstance.setVote(1, { from: accounts[1] }),
+        "You have already voted"
+      );
+    });
+    it("should increase the vote for a proposal ", async () => {
+      const proposalId = 1;
 
-      it("should vote for the first proposal", async () => {
-        await VotingInstance.setVote(1, { from: accounts[1] });
-        let voterObjet = await VotingInstance.getVoter(accounts[1], {
-          from: owner,
-        });
-
-        expect(voterObjet.hasVoted).to.be.true;
-        await expectRevert(
-          VotingInstance.setVote(1, { from: accounts[1] }),
-          "You have already voted"
-        );
+      let proposal = await VotingInstance.getOneProposal(proposalId, {
+        from: accounts[1],
       });
-      it("should increase the vote for a proposal ", async () => {
-        const proposalId = 1;
+      expect(proposal.voteCount).to.be.equal("1");
+    });
 
-        let proposal = await VotingInstance.getOneProposal(proposalId, {
-          from: accounts[1],
-        });
-        expect(proposal.voteCount).to.be.equal("1");
-      });
+    it("should end the voting session", async () => {
+      await VotingInstance.endVotingSession({ from: owner });
+      const initialStatus = await VotingInstance.workflowStatus();
+      expect(initialStatus).to.be.bignumber.equal(
+        WorkflowStatus.VotingSessionEnded
+      );
+    });
+  });
 
-      it("should end the voting session", async () => {
-        await VotingInstance.endVotingSession({ from: owner });
-        const initialStatus = await VotingInstance.workflowStatus();
-        expect(initialStatus).to.be.bignumber.equal(
-          WorkflowStatus.VotingSessionEnded
-        );
+  describe("Tally the vote", () => {
+    beforeEach(async function () {
+      VotingInstance = await Voting.deployed();
+    });
+    it("should start show the winner and tally vote", async () => {
+      await VotingInstance.tallyVotes({ from: owner });
+      const initialStatus = await VotingInstance.workflowStatus();
+      expect(initialStatus).to.be.bignumber.equal(WorkflowStatus.VotesTallied);
+      let proposal = await VotingInstance.getOneProposal(1, {
+        from: accounts[1],
       });
-
-      it("should start show the winner and tally vote", async () => {
-        await VotingInstance.tallyVotes({ from: owner });
-        const initialStatus = await VotingInstance.workflowStatus();
-        expect(initialStatus).to.be.bignumber.equal(
-          WorkflowStatus.VotesTallied
-        );
-        let proposal = await VotingInstance.getOneProposal(1, {
-          from: accounts[1],
-        });
-        console.log("winner", proposal);
-        let winner = await VotingInstance.winningProposalID();
-        console.log("w", winner);
-        assert.equal(winner, 1, "Winning proposal ID should be 1");
-      });
+      console.log("winner", proposal);
+      let winner = await VotingInstance.winningProposalID();
+      console.log("w", winner);
+      assert.equal(winner, 1, "Winning proposal ID should be 1");
     });
   });
 });
